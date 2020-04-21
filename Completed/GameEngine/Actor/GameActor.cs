@@ -11,24 +11,18 @@ namespace AkkaMjrTwo.GameEngine.Actor
     public abstract class CommandResult
     { }
 
-
-
     public class CommandAccepted : CommandResult
     { }
 
-
-
     public class CommandRejected : CommandResult
     {
-        public GameRuleViolation Violation { get; private set; }
+        public GameRuleViolation Violation { get; }
 
         public CommandRejected(GameRuleViolation violation)
         {
             Violation = violation;
         }
     }
-
-
 
     public class GameActor : PersistentActor
     {
@@ -63,7 +57,7 @@ namespace AkkaMjrTwo.GameEngine.Actor
                     if (_game is RunningGame game)
                     {
                         _game = game.TickCountDown();
-                        HandleChanges();
+                        HandleChanges(game, _game);
                     }
                 })
                 .Default(o =>
@@ -95,11 +89,12 @@ namespace AkkaMjrTwo.GameEngine.Actor
         {
             try
             {
+                var originalGame = _game;
                 _game = commandHandler.Invoke(command);
 
                 Sender.Tell(new CommandAccepted());
 
-                HandleChanges();
+                HandleChanges(originalGame, _game);
             }
             catch (GameRuleViolation violation)
             {
@@ -107,12 +102,10 @@ namespace AkkaMjrTwo.GameEngine.Actor
             }
         }
 
-        private void HandleChanges()
+        private void HandleChanges(Game originalGame, Game currentGame)
         {
-            PersistAll(_game.UncommitedEvents, ev =>
+            PersistAll(currentGame.Events.RemoveRange(0, originalGame.Events.Count), ev =>
             {
-                _game = _game.ApplyEvent(ev);
-
                 PublishEvent(ev);
 
                 ev.Match()

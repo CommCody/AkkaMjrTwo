@@ -1,27 +1,23 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Immutable;
 
 namespace AkkaMjrTwo.Domain
 {
     public abstract class GameCommand
     { }
 
-
-
     public class StartGame : GameCommand
     {
-        public List<PlayerId> Players { get; private set; }
+        public ImmutableList<PlayerId> Players { get; }
 
-        public StartGame(List<PlayerId> players)
+        public StartGame(ImmutableList<PlayerId> players)
         {
             Players = players;
         }
     }
 
-
-
     public class RollDice : GameCommand
     {
-        public PlayerId Player { get; private set; }
+        public PlayerId Player { get; }
 
         public RollDice(PlayerId player)
         {

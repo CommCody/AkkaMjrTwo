@@ -1,6 +1,6 @@
 ﻿using AkkaMjrTwo.Domain.Config;
 using System;
-using System.Collections.Generic;
+using System.Collections.Immutable;
 using System.Linq;
 
 namespace AkkaMjrTwo.Domain
@@ -14,8 +14,11 @@ namespace AkkaMjrTwo.Domain
 
         protected Game(GameId id)
             : base(id)
-        {
-        }
+        { }
+
+        protected Game(GameId id, ImmutableList<GameEvent> events)
+            : base(id, events)
+        { }
 
         public static UninitializedGame Create(GameId id)
         {
@@ -45,8 +48,6 @@ namespace AkkaMjrTwo.Domain
         }
     }
 
-
-
     public class UninitializedGame : Game
     {
         public UninitializedGame(GameId id)
@@ -54,31 +55,26 @@ namespace AkkaMjrTwo.Domain
         {
         }
 
-        public Game Start(List<PlayerId> players)
+        public Game Start(ImmutableList<PlayerId> players)
         {
             if (players.Count < 2)
             {
                 throw new NotEnoughPlayersViolation();
             }
 
-            var firstPlayer = players.First();
+            var firstPlayer = players[0];
 
-            RegisterUncommitedEvents(new GameStarted(GameId, players, new Turn(firstPlayer, GlobalSettings.TurnTimeoutSeconds)));
-
-            return this;
+            return ApplyEvent(new GameStarted(GameId, players, new Turn(firstPlayer, GlobalSettings.TurnTimeoutSeconds)));
         }
 
         public override Game ApplyEvent(GameEvent @event)
         {
-            Game game = this;
             if (@event is GameStarted gameStarted)
             {
-                game = new RunningGame(GameId, gameStarted.Players, gameStarted.InitialTurn, UncommitedEvents);
+                return new RunningGame(GameId, gameStarted.Players, gameStarted.InitialTurn, Events.Add(@event));
             }
 
-            MarkCommitted(@event);
-
-            return game;
+            return this;
         }
     }
 
@@ -87,20 +83,21 @@ namespace AkkaMjrTwo.Domain
     public class RunningGame : Game
     {
         private readonly Random _random;
-        private readonly List<KeyValuePair<PlayerId, int>> _rolledNumbers;
-        private readonly List<PlayerId> _players;
+        private readonly ImmutableList<(PlayerId Player, int Roll)> _rolledNumbers;
+        private readonly ImmutableList<PlayerId> _players;
+        private readonly Turn _turn;
 
-        private Turn _turn;
+        public RunningGame(GameId id, ImmutableList<PlayerId> players, Turn turn, ImmutableList<GameEvent> events)
+            : this(id, players, ImmutableList.Create<(PlayerId, int)>(), turn, events)
+        { }
 
-        public RunningGame(GameId id, List<PlayerId> players, Turn turn, List<GameEvent> uncommitedEvents)
-            : base(id)
+        private RunningGame(GameId id, ImmutableList<PlayerId> players, ImmutableList<(PlayerId, int)> rolledNumbers, Turn turn, ImmutableList<GameEvent> events)
+            : base(id, events)
         {
             _random = new Random();
-            _rolledNumbers = new List<KeyValuePair<PlayerId, int>>();
+            _rolledNumbers = rolledNumbers;
             _players = players;
             _turn = turn;
-
-            UncommitedEvents = uncommitedEvents;
         }
 
         public Game Roll(PlayerId player)
@@ -110,85 +107,89 @@ namespace AkkaMjrTwo.Domain
                 var rolledNumber = _random.Next(1, 7);
                 var diceRolled = new DiceRolled(GameId, rolledNumber, player);
 
-                var nextPlayer = GetNextPlayer();
+                var game = Apply(diceRolled);
+
+                var nextPlayer = game.GetNextPlayer();
                 if (nextPlayer != null)
                 {
-                    RegisterUncommitedEvents(diceRolled, new TurnChanged(GameId, new Turn(nextPlayer, GlobalSettings.TurnTimeoutSeconds)));
+                    return game.ApplyEvent(new TurnChanged(GameId, new Turn(nextPlayer, GlobalSettings.TurnTimeoutSeconds)));
                 }
                 else
                 {
-                    //collect all previous rolls to finish the game
-                    var rolls = _rolledNumbers.ToList();
-                    //add the last roll
-                    rolls.Add(new KeyValuePair<PlayerId, int>(diceRolled.Player, diceRolled.RolledNumber));
-                    
-                    RegisterUncommitedEvents(diceRolled, new GameFinished(GameId, BestPlayers(rolls)));
+                    return game.ApplyEvent(new GameFinished(GameId, game.BestPlayers()));
                 }
-                return this;
             }
             else throw new NotCurrentPlayerViolation();
         }
 
         public Game TickCountDown()
         {
-            var countdownUpdated = new TurnCountdownUpdated(GameId, _turn.SecondsLeft - 1);
-            if (_turn.SecondsLeft <= 1)
+            if (_turn.SecondsLeft > 1)
             {
-                var timedOut = new TurnTimedOut(GameId);
-                var nextPlayer = GetNextPlayer();
-                if (nextPlayer != null)
-                {
-                    RegisterUncommitedEvents(timedOut, new TurnChanged(GameId, new Turn(nextPlayer, GlobalSettings.TurnTimeoutSeconds)));
-                }
-                else
-                {
-                    RegisterUncommitedEvents(timedOut, new GameFinished(GameId, BestPlayers(_rolledNumbers)));
-                }
+                return ApplyEvent(new TurnCountdownUpdated(GameId, _turn.SecondsLeft - 1));
+            }
+            var timedOut = new TurnTimedOut(GameId);
+            var game = Apply(timedOut);
+            var nextPlayer = game.GetNextPlayer();
+            if (nextPlayer != null)
+            {
+                return game.ApplyEvent(new TurnChanged(GameId, new Turn(nextPlayer, GlobalSettings.TurnTimeoutSeconds)));
             }
             else
             {
-                RegisterUncommitedEvents(countdownUpdated);
+                return game.ApplyEvent(new GameFinished(GameId, game.BestPlayers()));
+            }
+        }
+        
+        private RunningGame Apply(DiceRolled diceRolled)
+        {
+            if (!_rolledNumbers.Exists(x => x.Player.Equals(diceRolled.Player)))
+            {
+                var rolledNumbers = _rolledNumbers.Add((diceRolled.Player, diceRolled.RolledNumber));
+                return new RunningGame(GameId, _players, rolledNumbers, _turn, Events.Add(diceRolled));
             }
             return this;
         }
-        
+
+        private RunningGame Apply(TurnTimedOut turnTimedOut)
+        {
+            return new RunningGame(GameId, _players, _rolledNumbers, _turn, Events.Add(turnTimedOut));
+        }
+
         public override Game ApplyEvent(GameEvent @event)
         {
-            Game game = this;
-            if (@event is TurnChanged turnChanged)
-            {
-                _turn = turnChanged.Turn;
-            }
             if (@event is DiceRolled diceRolled)
             {
-                if (!_rolledNumbers.Exists(x => x.Key.Equals(diceRolled.Player)))
-                {
-                    _rolledNumbers.Add(new KeyValuePair<PlayerId, int>(diceRolled.Player, diceRolled.RolledNumber));
-                }
+                return Apply(diceRolled);
+            }
+            if (@event is TurnChanged turnChanged)
+            {
+                return new RunningGame(GameId, _players, _rolledNumbers, turnChanged.Turn, Events.Add(turnChanged));
             }
             if (@event is TurnCountdownUpdated turnCountdownUpdated)
             {
-                _turn.SecondsLeft = turnCountdownUpdated.SecondsLeft;
+                var updatedTurn = new Turn(_turn.CurrentPlayer, turnCountdownUpdated.SecondsLeft);
+                return new RunningGame(GameId, _players, _rolledNumbers, updatedTurn, Events.Add(turnCountdownUpdated));
             }
             if (@event is GameFinished gameFinished)
             {
-                game = new FinishedGame(GameId, _players, gameFinished.Winners, UncommitedEvents);
+                return new FinishedGame(GameId, _players, gameFinished.Winners, Events.Add(gameFinished));
+            }
+            if (@event is TurnTimedOut turnTimedOut)
+            {
+                return Apply(turnTimedOut);
             }
 
-            MarkCommitted(@event);
-
-            return game;
+            return this;
         }
 
-        private static List<PlayerId> BestPlayers(IReadOnlyCollection<KeyValuePair<PlayerId, int>> rolls)
+        private ImmutableList<PlayerId> BestPlayers()
         {
-            var best = new List<PlayerId>();
+            if (!_rolledNumbers.Any())
+                return ImmutableList.Create<PlayerId>();
 
-            if (!rolls.Any())
-                return best;
-
-            var highest = rolls.Select(x => x.Value).Max();
-            best = rolls.Where(x => x.Value == highest).Select(x => x.Key).ToList();
+            var highest = _rolledNumbers.Max(x => x.Roll);
+            var best = _rolledNumbers.Where(x => x.Roll == highest).Select(x => x.Player).ToImmutableList();
 
             return best;
         }
@@ -202,19 +203,16 @@ namespace AkkaMjrTwo.Domain
         }
     }
 
-
-
     public class FinishedGame : Game
     {
-        public List<PlayerId> Players { get; private set; }
-        public List<PlayerId> Winners { get; private set; }
+        public ImmutableList<PlayerId> Players { get; }
+        public ImmutableList<PlayerId> Winners { get; }
 
-        public FinishedGame(GameId id, List<PlayerId> players, List<PlayerId> winners, List<GameEvent> uncommitedEvents)
-            : base(id)
+        public FinishedGame(GameId id, ImmutableList<PlayerId> players, ImmutableList<PlayerId> winners, ImmutableList<GameEvent> events)
+            : base(id, events)
         {
             Players = players;
             Winners = winners;
-            UncommitedEvents = uncommitedEvents;
         }
 
         public override Game ApplyEvent(GameEvent arg)
@@ -223,12 +221,10 @@ namespace AkkaMjrTwo.Domain
         }
     }
 
-
-
     public class Turn
     {
-        public PlayerId CurrentPlayer { get; set; }
-        public int SecondsLeft { get; set; }
+        public PlayerId CurrentPlayer { get; }
+        public int SecondsLeft { get; }
 
         public Turn(PlayerId currentPlayer, int secondsLeft)
         {

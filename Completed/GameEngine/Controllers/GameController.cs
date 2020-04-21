@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Immutable;
+using System.Linq;
 using System.Threading.Tasks;
 using Akka.Actor;
 using AkkaMjrTwo.Domain;
@@ -35,11 +36,7 @@ namespace AkkaMjrTwo.GameEngine.Controllers
         [HttpPost]
         public async Task<ActionResult> Start(StartGameRequest request)
         {
-            var playerIds = new List<PlayerId>();
-            foreach (var str in request.Players)
-            {
-                playerIds.Add(new PlayerId(str));
-            }
+            var playerIds = request.Players.Select(p => new PlayerId(p)).ToImmutableList();
 
             var msg = new SendCommand(new GameId(request.GameId), new StartGame(playerIds));
 

@@ -4,7 +4,7 @@ namespace AkkaMjrTwo.Domain
 {
     public class Id<T> : IEquatable<Id<T>>
     {
-        public string Value { get; private set; }
+        public string Value { get; }
 
         public Id(string value)
         {

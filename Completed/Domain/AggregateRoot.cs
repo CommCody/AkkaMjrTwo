@@ -1,32 +1,24 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Immutable;
 
 namespace AkkaMjrTwo.Domain
 {
-    public abstract class AggregateRoot<T, E> where T : AggregateRoot<T, E>
+    public abstract class AggregateRoot<T, E>
+        where T : AggregateRoot<T, E>
     {
-        public List<E> UncommitedEvents { get; protected set; }
+        public ImmutableList<E> Events { get; }
 
         protected Id<T> Id { get; }
 
         protected AggregateRoot(Id<T> id)
+            : this(id, ImmutableList.Create<E>())
+        { }
+
+        protected AggregateRoot(Id<T> id, ImmutableList<E> events)
         {
             Id = id;
-            UncommitedEvents = new List<E>();
+            Events = events;
         }
 
         public abstract T ApplyEvent(E @event);
-
-        public void MarkCommitted(E @event)
-        {
-            UncommitedEvents.Remove(@event);
-        }
-
-        protected void RegisterUncommitedEvents(params E[] events)
-        {
-            foreach (var @event in events)
-            {
-                UncommitedEvents.Add(@event);
-            }
-        }
     }
 }

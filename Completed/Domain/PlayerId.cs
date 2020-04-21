@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Diagnostics.Contracts;
 
 namespace AkkaMjrTwo.Domain
 {
     public class PlayerId : IEquatable<PlayerId>
     {
-        public string Value { get; private set; }
+        public string Value { get; }
 
         public PlayerId(string value)
         {

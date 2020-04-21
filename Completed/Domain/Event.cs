@@ -1,10 +1,10 @@
-﻿using System.Collections.Generic;
+﻿using System.Collections.Immutable;
 
 namespace AkkaMjrTwo.Domain
 {
     public abstract class GameEvent
     {
-        public GameId Id { get; private set; }
+        public GameId Id { get; }
 
         protected GameEvent(GameId id)
         {
@@ -14,9 +14,9 @@ namespace AkkaMjrTwo.Domain
 
     public class DiceRolled : GameEvent
     {
-        public int RolledNumber { get; private set; }
+        public int RolledNumber { get; }
 
-        public PlayerId Player { get; private set; }
+        public PlayerId Player { get; }
 
         public DiceRolled(GameId id, int rolledNumber, PlayerId player)
             : base(id)
@@ -28,10 +28,10 @@ namespace AkkaMjrTwo.Domain
 
     public class GameStarted : GameEvent
     {
-        public List<PlayerId> Players { get; private set; }
-        public Turn InitialTurn { get; private set; }
+        public ImmutableList<PlayerId> Players { get; }
+        public Turn InitialTurn { get; }
 
-        public GameStarted(GameId id, List<PlayerId> players, Turn initialTurn)
+        public GameStarted(GameId id, ImmutableList<PlayerId> players, Turn initialTurn)
             : base(id)
         {
             Players = players;
@@ -41,7 +41,7 @@ namespace AkkaMjrTwo.Domain
 
     public class TurnChanged : GameEvent
     {
-        public Turn Turn { get; private set; }
+        public Turn Turn { get; }
 
         public TurnChanged(GameId id, Turn turn)
             : base(id)
@@ -52,7 +52,7 @@ namespace AkkaMjrTwo.Domain
 
     public class TurnCountdownUpdated : GameEvent
     {
-        public int SecondsLeft { get; private set; }
+        public int SecondsLeft { get; }
 
         public TurnCountdownUpdated(GameId id, int secondsLeft)
             : base(id)
@@ -65,15 +65,14 @@ namespace AkkaMjrTwo.Domain
     {
         public TurnTimedOut(GameId id)
             : base(id)
-        {
-        }
+        { }
     }
 
     public class GameFinished : GameEvent
     {
-        public List<PlayerId> Winners { get; private set; }
+        public ImmutableList<PlayerId> Winners { get; }
 
-        public GameFinished(GameId id, List<PlayerId> winners)
+        public GameFinished(GameId id, ImmutableList<PlayerId> winners)
             : base(id)
         {
             Winners = winners;

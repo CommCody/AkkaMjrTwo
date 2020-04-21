@@ -1,6 +1,6 @@
 ﻿using Akka.Actor;
-using AkkaMjrTwo.Domain;
 using System;
+using AkkaMjrTwo.Domain;
 
 namespace AkkaMjrTwo.GameEngine.Actor
 {
@@ -13,8 +13,8 @@ namespace AkkaMjrTwo.GameEngine.Actor
 
     public class SendCommand
     {
-        public GameId GameId { get; private set; }
-        public GameCommand Command { get; private set; }
+        public GameId GameId { get; }
+        public GameCommand Command { get; }
 
         public SendCommand(GameId gameId, GameCommand command)
         {
@@ -26,7 +26,7 @@ namespace AkkaMjrTwo.GameEngine.Actor
 
     public class GameCreated
     {
-        public GameId GameId { get; private set; }
+        public GameId GameId { get; }
 
         public GameCreated(GameId gameId)
         {
@@ -59,7 +59,7 @@ namespace AkkaMjrTwo.GameEngine.Actor
 
         private bool Handle(CreateGame message)
         {
-            var id = new GameId($"Game_{Guid.NewGuid().ToString()}");
+            var id = new GameId($"Game_{Guid.NewGuid():D}");
 
             var gameActor = Context.Child(id.Value);
             if (!gameActor.Equals(ActorRefs.Nobody))
