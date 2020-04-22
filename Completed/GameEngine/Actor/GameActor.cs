@@ -24,6 +24,7 @@ namespace AkkaMjrTwo.GameEngine.Actor
         }
     }
 
+
     public class GameActor : PersistentActor
     {
         private Game _game;
@@ -48,18 +49,8 @@ namespace AkkaMjrTwo.GameEngine.Actor
         protected override bool ReceiveCommand(object message)
         {
             return message.Match()
-                .With<GameCommand>(cmd =>
-                {
-                    HandleResult(_game.HandleCommand, cmd);
-                })
-                .With<TickCountdown>(() =>
-                {
-                    if (_game is RunningGame game)
-                    {
-                        _game = game.TickCountDown();
-                        HandleChanges(game, _game);
-                    }
-                })
+                .With<GameCommand>(cmd => HandleResult(cmd))
+                .With<TickCountdown>(cmd => HandleResult(cmd))
                 .Default(o =>
                 {
                     Context.System.Log.Warning("Game is not running, cannot update countdown");
@@ -85,12 +76,27 @@ namespace AkkaMjrTwo.GameEngine.Actor
                 .WasHandled;
         }
 
-        private void HandleResult(Func<GameCommand, Game> commandHandler, GameCommand command)
+        private void HandleResult(TickCountdown command)
+        {
+            var originalGame = _game;
+            _game = originalGame.TickCountDown();
+            HandleChanges(originalGame, _game);
+        }
+
+        private void HandleResult(GameCommand command)
         {
             try
             {
                 var originalGame = _game;
-                _game = commandHandler.Invoke(command);
+                switch (command)
+                {
+                    case StartGame startGame:
+                        _game = _game.Start(startGame.Players);
+                        break;
+                    case RollDice rollDice:
+                        _game = _game.RollDice(rollDice.Player);
+                        break;
+                }
 
                 Sender.Tell(new CommandAccepted());
 

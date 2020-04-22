@@ -10,7 +10,6 @@ namespace AkkaMjrTwo.GameEngine.Actor
     { }
 
 
-
     public class SendCommand
     {
         public GameId GameId { get; }

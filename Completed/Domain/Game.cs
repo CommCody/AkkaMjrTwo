@@ -25,27 +25,9 @@ namespace AkkaMjrTwo.Domain
             return new UninitializedGame(id);
         }
 
-        public Game HandleCommand(GameCommand command)
-        {
-            if (command is StartGame game)
-            {
-                if (this is UninitializedGame uninitializedGame)
-                {
-                    return uninitializedGame.Start(game.Players);
-                }
-                else throw new GameAlreadyStartedViolation();
-            }
-
-            if (command is RollDice dice)
-            {
-                if (this is RunningGame runningGame)
-                {
-                    return runningGame.Roll(dice.Player);
-                }
-                else throw new GameNotRunningViolation();
-            }
-            return this;
-        }
+        public abstract Game Start(ImmutableList<PlayerId> players);
+        public abstract Game RollDice(PlayerId player);
+        public abstract Game TickCountDown();
     }
 
     public class UninitializedGame : Game
@@ -55,7 +37,7 @@ namespace AkkaMjrTwo.Domain
         {
         }
 
-        public Game Start(ImmutableList<PlayerId> players)
+        public override Game Start(ImmutableList<PlayerId> players)
         {
             if (players.Count < 2)
             {
@@ -65,6 +47,16 @@ namespace AkkaMjrTwo.Domain
             var firstPlayer = players[0];
 
             return ApplyEvent(new GameStarted(GameId, players, new Turn(firstPlayer, GlobalSettings.TurnTimeoutSeconds)));
+        }
+
+        public override Game RollDice(PlayerId player)
+        {
+            throw new GameNotRunningViolation();
+        }
+
+        public override Game TickCountDown()
+        {
+            return this;
         }
 
         public override Game ApplyEvent(GameEvent @event)
@@ -77,8 +69,6 @@ namespace AkkaMjrTwo.Domain
             return this;
         }
     }
-
-
 
     public class RunningGame : Game
     {
@@ -100,7 +90,12 @@ namespace AkkaMjrTwo.Domain
             _turn = turn;
         }
 
-        public Game Roll(PlayerId player)
+        public override Game Start(ImmutableList<PlayerId> players)
+        {
+            throw new GameAlreadyStartedViolation();
+        }
+
+        public override Game RollDice(PlayerId player)
         {
             if (_turn.CurrentPlayer.Equals(player))
             {
@@ -122,7 +117,7 @@ namespace AkkaMjrTwo.Domain
             else throw new NotCurrentPlayerViolation();
         }
 
-        public Game TickCountDown()
+        public override Game TickCountDown()
         {
             if (_turn.SecondsLeft > 1)
             {
@@ -213,6 +208,21 @@ namespace AkkaMjrTwo.Domain
         {
             Players = players;
             Winners = winners;
+        }
+
+        public override Game Start(ImmutableList<PlayerId> players)
+        {
+            throw new GameAlreadyStartedViolation();
+        }
+
+        public override Game RollDice(PlayerId player)
+        {
+            return this;
+        }
+
+        public override Game TickCountDown()
+        {
+            return this;
         }
 
         public override Game ApplyEvent(GameEvent arg)
